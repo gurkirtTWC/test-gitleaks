@@ -1,0 +1,36 @@
+name: 'Gitleaks Secret Scan'
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Run Gitleaks Scan (Full Repo)'
+        id: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: true
+
+      - name: 'Check Scan Results'
+        if: steps.gitleaks.outcome == 'failure'
+        run: |
+          echo "❌ Gitleaks detected secrets in your code!"
+          exit 1
