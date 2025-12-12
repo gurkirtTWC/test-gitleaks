@@ -16,51 +16,12 @@ permissions:
 
 jobs:
   gitleaks:
-    # Run on pushes/prs as before, and only on issues when the title matches
-    if: >
-      github.event_name != 'issues' ||
-      (github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.title, 'Issue: Gitleaks Secret Scan'))
     runs-on: ubuntu-latest
-
     steps:
-      # Parse branch from issue body (only runs for issues)
-      - name: Parse branch from issue body
-        if: github.event_name == 'issues'
-        id: parse
-        run: |
-          # Try to extract branch from JSON event payload using a few common patterns.
-          # Supported patterns in issue body:
-          #   branch-name: my-branch
-          #   branch-name=my-branch
-          #   "branch-name": "my-branch"
-          BRANCH=""
-          BRANCH=$(grep -Eo 'branch-name[:=]\s*[A-Za-z0-9._/-]+' "$GITHUB_EVENT_PATH" | head -n1 | sed -E 's/.*[:=]\s*//')
-          # try quoted JSON style
-          if [ -z "$BRANCH" ]; then
-            BRANCH=$(grep -Eo '"branch-name"[[:space:]]*[:=][[:space:]]*"[^"]+"' "$GITHUB_EVENT_PATH" | head -n1 | sed -E 's/.*[:=]\s*"([^"]+)".*/\1/')
-          fi
-          # final default if nothing found
-          if [ -z "$BRANCH" ] || [ "$BRANCH" = "null" ]; then
-            BRANCH=master
-          fi
-          echo "Parsed branch: $BRANCH"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-
-      # Checkout for issue-triggered runs (uses parsed branch)
-      - name: Checkout repository (branch from issue)
-        if: github.event_name == 'issues'
+      - name: 'Checkout Repository'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ steps.parse.outputs.branch }}
-
-      # Checkout for push / pull_request runs (use the default ref)
-      - name: Checkout repository (push/pr)
-        if: github.event_name != 'issues'
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.ref }}
 
       - name: 'Run Gitleaks Scan (Full Repo)'
         id: gitleaks
