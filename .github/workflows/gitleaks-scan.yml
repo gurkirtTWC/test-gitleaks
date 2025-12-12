@@ -5,8 +5,8 @@ on:
     branches:
       - master
   pull_request:
-  issues:
-    types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -16,14 +16,25 @@ permissions:
 
 jobs:
   gitleaks:
+    # Only run on issues, not PR comments
+    if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
-      - name: 'Checkout Repository'
+      - name: 'Extract Branch Name from Comment'
+        id: extract_branch
+        run: |
+          # Extract branch name from comment (first line)
+          BRANCH_NAME=$(echo "${{ github.event.comment.body }}" | head -n 1 | xargs)
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Extracted branch: $BRANCH_NAME"
+
+      - name: 'Checkout Repository (Specified Branch)'
         uses: actions/checkout@v4
         with:
+          ref: ${{ steps.extract_branch.outputs.branch }}
           fetch-depth: 0
 
-      - name: 'Run Gitleaks Scan (Full Repo)'
+      - name: 'Run Gitleaks Scan'
         id: gitleaks
         uses: gitleaks/gitleaks-action@v2
         continue-on-error: true
@@ -36,3 +47,21 @@ jobs:
         run: |
           echo "❌ Gitleaks detected secrets in your code!"
           exit 1
+
+      - name: 'Comment Scan Results on Issue'
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = "${{ steps.extract_branch.outputs.branch }}";
+            const status = "${{ steps.gitleaks.outcome }}";
+            const message = status === 'failure' 
+              ? `❌ Gitleaks detected secrets on branch **${branch}**!\n\nCheck the [Actions tab](https://github.com/${{ github.repository }}/actions) for details.`
+              : `✅ Gitleaks scan completed successfully on branch **${branch}**!`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            })
